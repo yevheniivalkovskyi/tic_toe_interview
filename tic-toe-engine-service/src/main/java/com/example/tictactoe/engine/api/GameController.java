@@ -4,17 +4,15 @@ import com.example.tictactoe.core.model.Game;
 import com.example.tictactoe.core.model.GameResult;
 import com.example.tictactoe.engine.api.dto.GameResponse;
 import com.example.tictactoe.engine.api.dto.MoveRequest;
-import com.example.tictactoe.engine.api.sse.GameSsePublisher;
 import com.example.tictactoe.engine.client.SessionClient;
 import com.example.tictactoe.engine.client.dto.SessionResponse;
 import feign.FeignException;
 import com.example.tictactoe.engine.session.GameSessionService;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import jakarta.validation.Valid;
-import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * REST controller for game operations.
@@ -26,14 +24,11 @@ public class GameController {
 
     private final GameSessionService gameSessionService;
     private final SessionClient sessionClient;
-    private final GameSsePublisher gameSsePublisher;
 
     public GameController(GameSessionService gameSessionService,
-                          SessionClient sessionClient,
-                          GameSsePublisher gameSsePublisher) {
+                          SessionClient sessionClient) {
         this.gameSessionService = gameSessionService;
         this.sessionClient = sessionClient;
-        this.gameSsePublisher = gameSsePublisher;
     }
 
     /**
@@ -57,7 +52,6 @@ public class GameController {
         }
 
         GameResponse response = new GameResponse(result.getGame(), result.getMessage());
-        gameSsePublisher.publish(gameId, response);
         return ResponseEntity.ok(response);
     }
 
@@ -79,19 +73,11 @@ public class GameController {
     }
 
     /**
-     * Stream game updates via SSE.
-     * GET /games/{gameId}/stream
-     */
-    @GetMapping(value = "/{gameId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter streamGame(@PathVariable String gameId) {
-        return gameSsePublisher.register(gameId);
-    }
-
-    /**
      * Get session details for a game.
      * GET /games/{gameId}/session
      */
     @GetMapping("/{gameId}/session")
+    @CircuitBreaker(name = "sessionService", fallbackMethod = "getSessionFallback")
     public ResponseEntity<SessionResponse> getSession(@PathVariable String gameId) {
         try {
             SessionResponse session = sessionClient.getSession(gameId);
@@ -102,7 +88,12 @@ public class GameController {
         } catch (FeignException.NotFound ex) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         } catch (FeignException ex) {
-            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
+            throw ex;
         }
+    }
+
+    @SuppressWarnings("unused")
+    private ResponseEntity<SessionResponse> getSessionFallback(String gameId, Throwable throwable) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
     }
 }

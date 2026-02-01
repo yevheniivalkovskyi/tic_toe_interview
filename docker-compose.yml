@@ -15,9 +15,11 @@ services:
       - EUREKA_INSTANCE_HOSTNAME=engine
       - session.base-url=http://session:8081
       - ui.base-url=http://ui:80
+      - management.zipkin.tracing.endpoint=http://zipkin:9411/api/v2/spans
     depends_on:
       - eureka
       - session
+      - zipkin
 
   session:
     build: ./tic-toe-session-service
@@ -28,8 +30,10 @@ services:
       - EUREKA_INSTANCE_HOSTNAME=session
       - engine.base-url=http://engine:8080
       - ui.base-url=http://ui:80
+      - management.zipkin.tracing.endpoint=http://zipkin:9411/api/v2/spans
     depends_on:
       - eureka
+      - zipkin
 
   gateway:
     build: ./tic-toe-api-gateway
@@ -37,10 +41,12 @@ services:
       - "8082:8082"
     environment:
       - eureka.client.serviceUrl.defaultZone=http://eureka:8761/eureka
+      - management.zipkin.tracing.endpoint=http://zipkin:9411/api/v2/spans
     depends_on:
       - eureka
       - engine
       - session
+      - zipkin
 
   ui:
     build: ./tic-toe-ui-service
@@ -49,3 +55,8 @@ services:
     depends_on:
       - engine
       - session
+
+  zipkin:
+    image: openzipkin/zipkin:2.24
+    ports:
+      - "9411:9411"

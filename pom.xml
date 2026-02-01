@@ -23,9 +23,7 @@
         <module>tic-toe-common</module>
         <module>tic-toe-engine-service</module>
         <module>tic-toe-session-service</module>
-        <module>tic-toe-eureka-server</module>
-        <module>tic-toe-api-gateway</module>
-        <module>web</module>
+        <module>tic-toe-eureka-server</module>        <module>tic-toe-api-gateway</module>
     </modules>
 
     <properties>

@@ -1,29 +1,35 @@
-import { Injectable } from "@angular/core";
-import { HttpClient } from "@angular/common/http";
-import { Observable } from "rxjs";
 import { SessionResponse } from "../models/session-response.model";
 
-@Injectable({ providedIn: "root" })
 export class TicToeApiService {
-  private readonly gatewayBaseUrl = "http://localhost:8082";
-  private readonly sessionBaseUrl = `${this.gatewayBaseUrl}/session`;
-  private readonly engineBaseUrl = `${this.gatewayBaseUrl}/engine`;
+  private readonly sessionBaseUrl = "http://localhost:8081";
 
-  constructor(private http: HttpClient) {}
-
-  createSession(): Observable<SessionResponse> {
-    return this.http.post<SessionResponse>(`${this.sessionBaseUrl}/sessions`, {});
+  async createSession(): Promise<SessionResponse> {
+    const response = await fetch(`${this.sessionBaseUrl}/sessions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: "Failed to create session" }));
+      throw error;
+    }
+    return response.json();
   }
 
-  simulateSession(sessionId: string): Observable<SessionResponse> {
-    return this.http.post<SessionResponse>(`${this.sessionBaseUrl}/sessions/${sessionId}/simulate`, {});
-  }
-
-  getSession(sessionId: string): Observable<SessionResponse> {
-    return this.http.get<SessionResponse>(`${this.sessionBaseUrl}/sessions/${sessionId}`);
-  }
-
-  getSseUrl(gameId: string): string {
-    return `${this.engineBaseUrl}/games/${gameId}/stream`;
+  async simulateSession(sessionId: string): Promise<SessionResponse> {
+    const response = await fetch(`${this.sessionBaseUrl}/sessions/${sessionId}/simulate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: "Failed to simulate session" }));
+      throw error;
+    }
+    return response.json();
   }
 }

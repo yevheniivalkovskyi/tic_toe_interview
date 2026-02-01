@@ -6,6 +6,7 @@ import com.example.tictactoe.session.client.dto.EngineGameResponse;
 import com.example.tictactoe.session.client.dto.EngineMoveRequest;
 import com.example.tictactoe.session.model.Session;
 import com.example.tictactoe.session.model.SessionStatus;
+import com.example.tictactoe.session.ws.SessionUpdatePublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,11 +28,14 @@ class SessionServiceImplTest {
     @Mock
     private EngineClient engineClient;
 
+    @Mock
+    private SessionUpdatePublisher updatePublisher;
+
     private SessionServiceImpl sessionService;
 
     @BeforeEach
     void setUp() {
-        sessionService = new SessionServiceImpl(engineClient);
+        sessionService = new SessionServiceImpl(engineClient, updatePublisher);
     }
 
     @Test
