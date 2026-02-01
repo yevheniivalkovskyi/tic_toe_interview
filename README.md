@@ -9,8 +9,7 @@ This is a multi-module Maven-based Spring Boot application that provides a found
 - **Tic Toe Common Module** - Contains shared domain models and entities
 - **Tic Toe Engine Service** - Game engine microservice that manages game state, validates moves, and exposes REST endpoints
 - **Tic Toe Session Service** - Session microservice that manages sessions and simulates gameplay via the engine service
-- **Web Module** - Optional REST layer for health checks and future integrations
-- **Tic Toe UI Service** - Angular UI for visualizing the automated game flow
+- **Tic Toe UI Service** - React UI for visualizing the automated game flow (WebSocket updates)
 - **Tic Toe Eureka Server** - Service registry for discovery
 - **Tic Toe API Gateway** - Single entry point for routing API traffic
 
@@ -19,7 +18,10 @@ This is a multi-module Maven-based Spring Boot application that provides a found
 - **Spring Boot 3.2.0** - Latest stable version of Spring Boot
 - **Java 17** - Modern Java version with enhanced features
 - **Maven** - Dependency management and build tool
-- **RESTful API** - Ready for building REST endpoints
+- **RESTful API** - Service endpoints for game and session management
+- **WebSocket** - Live session updates to the UI
+- **Zipkin Tracing** - Distributed tracing via Micrometer + Zipkin
+- **Resilience4j** - Circuit breakers for inter-service calls
 - **Health Check Endpoint** - Basic health monitoring endpoint
 
 ## Project Structure
@@ -63,31 +65,22 @@ tic_toe_interview/
 │           │       ├── api/
 │           │       ├── client/
 │           │       ├── model/
-│           │       └── service/
+│           │       ├── service/
+│           │       └── ws/
 │           └── resources/
 │               └── application.properties
-└── web/                                       # Web Module
-    ├── pom.xml
-    └── src/
-        └── main/
-            ├── java/
-            │   └── com/example/tictactoe/
-            │       ├── TicTacToeApplication.java  # Main application class
-            │       └── controller/
-            │           └── HealthController.java   # Health check
-            └── resources/
-                └── application.properties         # Application configuration
-└── tic-toe-ui-service/                        # Angular UI Service
+└── tic-toe-ui-service/                        # React UI Service (Vite)
     ├── package.json
-    ├── angular.json
+    ├── vite.config.ts
+    ├── index.html
     └── src/
-        ├── index.html
-        ├── main.ts
+        ├── main.tsx
         ├── styles.css
         └── app/
-            ├── app.component.ts
-            ├── app.component.html
-            └── app.component.css
+            ├── App.tsx
+            ├── App.css
+            └── services/
+                └── tic-toe-api.service.ts
 └── tic-toe-eureka-server/                     # Eureka Registry
     ├── pom.xml
     └── src/
@@ -110,7 +103,6 @@ The modules follow a microservices-oriented architecture with clear separation o
 
 - **tic-toe-engine-service** → depends on **tic-toe-common**
 - **tic-toe-session-service** → depends on **tic-toe-common**
-- **web** → standalone (health check only)
 - **tic-toe-common** → no dependencies (pure domain models)
 - **tic-toe-eureka-server** → standalone registry
 - **tic-toe-api-gateway** → depends on Eureka for service discovery
@@ -141,7 +133,7 @@ From the root directory, build all modules:
 mvn clean install
 ```
 
-This will compile all modules in the correct order (tic-toe-common → tic-toe-engine-service → tic-toe-session-service → tic-toe-eureka-server → tic-toe-api-gateway → web).
+This will compile all modules in the correct order (tic-toe-common → tic-toe-engine-service → tic-toe-session-service → tic-toe-eureka-server → tic-toe-api-gateway).
 
 ### 2. Run the Engine Service
 
@@ -188,7 +180,6 @@ Gateway: `http://localhost:8082`
 
 Once the application is running, you can verify it by accessing:
 
-- **Health Check**: http://localhost:8080/api/health (web module, optional)
 - **Game State**: http://localhost:8080/games/{gameId}
 - **Game Session Details**: http://localhost:8080/games/{gameId}/session
 - **Session State**: http://localhost:8081/sessions/{sessionId}
@@ -200,11 +191,12 @@ Once the application is running, you can verify it by accessing:
 ```bash
 cd tic-toe-ui-service
 npm install
-npm start
+npm run dev
 ```
 
 The UI will be available at `http://localhost:4200`.
-By default it calls the API Gateway at `http://localhost:8082`.
+By default it calls the Session Service directly at `http://localhost:8081` and
+opens a WebSocket to `ws://localhost:8081/ws/session?sessionId=...` for live updates.
 
 ### Docker (All Services)
 
@@ -227,6 +219,7 @@ Services:
 - Engine: `http://localhost:8080`
 - Session: `http://localhost:8081`
 - UI: `http://localhost:4200`
+- Zipkin: `http://localhost:9411`
 
 You should see a JSON response:
 ```json
@@ -248,9 +241,6 @@ You should see a JSON response:
 - **GET** `/games/{gameId}`  
   Retrieves the current game state (board and status).
 
-- **GET** `/games/{gameId}/stream`  
-  Server-Sent Events stream of game updates (pushes updates after each move).
-
 - **GET** `/games/{gameId}/session`  
   Retrieves session details from the session service via Feign.
 
@@ -268,6 +258,11 @@ You should see a JSON response:
 - **GET** `/sessions/{sessionId}/game`  
   Proxies the current game state from the engine service (validates Feign communication).
 
+### WebSocket Endpoint (Session Service)
+
+- **WS** `/ws/session?sessionId={sessionId}`  
+  Streams live session updates to the UI.
+
 ## Configuration
 
 Application configuration can be added under:
@@ -280,6 +275,7 @@ Application configuration can be added under:
 - **UI Base URL**: `ui.base-url` for CORS (default `http://localhost:4200`)
 - **Eureka URL**: `http://localhost:8761/eureka`
 - **Logging**: Configured to show INFO level logs, DEBUG for application packages
+- **Tracing**: Zipkin is enabled via Micrometer (`http://localhost:9411`)
 
 ## Module Details
 
@@ -310,13 +306,6 @@ The `tic-toe-session-service` module contains:
 - REST endpoints for session management
 - Depends on `tic-toe-common` module
 
-### Web Module
-
-The `web` module contains:
-- Health check endpoint (optional)
-- Spring Boot application entry point
-- Configuration files
-- Contains all Spring Boot dependencies
 
 ## Dependencies
 
@@ -342,10 +331,6 @@ The `web` module contains:
 - `spring-cloud-starter-openfeign` - Feign client for engine service
 - `spring-cloud-starter-netflix-eureka-client` - Service discovery client
 
-### Web Module
-- `spring-boot-starter-web` - Web support (health check)
-- `spring-boot-starter-test` - Testing support (JUnit, Mockito, etc.)
-- `spring-boot-devtools` - Development tools for hot reload (optional)
 
 ### Eureka Server
 - `spring-cloud-starter-netflix-eureka-server` - Service registry
@@ -374,7 +359,6 @@ mvn clean install -pl tic-toe-engine-service
 mvn clean install -pl tic-toe-session-service
 mvn clean install -pl tic-toe-eureka-server
 mvn clean install -pl tic-toe-api-gateway
-mvn clean install -pl web
 ```
 
 ### Create Executable JAR
